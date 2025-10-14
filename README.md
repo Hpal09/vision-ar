@@ -1,5 +1,7 @@
 # Vision byDisrupt AR Demo
 
+[![Pages](https://github.com/Hpal09/vision-ar/actions/workflows/pages.yml/badge.svg)](https://github.com/Hpal09/vision-ar/actions/workflows/pages.yml) [![License](https://img.shields.io/github/license/Hpal09/vision-ar)](LICENSE) [![Stars](https://img.shields.io/github/stars/Hpal09/vision-ar?style=social)](https://github.com/Hpal09/vision-ar/stargazers) [![Issues](https://img.shields.io/github/issues/Hpal09/vision-ar)](https://github.com/Hpal09/vision-ar/issues) [![Last commit](https://img.shields.io/github/last-commit/Hpal09/vision-ar)](https://github.com/Hpal09/vision-ar/commits/main)
+
 An interactive Augmented Reality (AR) experience built with MindAR and Three.js that brings Dubai postcards to life with 3D models and interactive elements.
 
 ## 🌟 Features
@@ -16,7 +18,7 @@ An interactive Augmented Reality (AR) experience built with MindAR and Three.js 
 
 ## 🚀 Live Demo
 
-Visit the live demo: [Vision byDisrupt AR Demo](https://bydisrupt.github.io/vision-ar-demo/)
+Visit the live demo: [Vision byDisrupt AR Demo](https://hpal09.github.io/vision-ar/)
 
 ## 🛠️ Technologies Used
 
@@ -43,7 +45,7 @@ Visit the live demo: [Vision byDisrupt AR Demo](https://bydisrupt.github.io/visi
 ## 🏗️ Project Structure
 
 ```
-vision-ar-demo/
+vision-ar/
 ├── index.html          # Main HTML file
 ├── app.js             # Main JavaScript application
 ├── style.css          # CSS styles
@@ -57,8 +59,8 @@ vision-ar-demo/
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/bydisrupt/vision-ar-demo.git
-   cd vision-ar-demo
+   git clone https://github.com/Hpal09/vision-ar.git
+   cd vision-ar
    ```
 
 2. **Open in browser**: Simply open `index.html` in a modern web browser
