@@ -215,25 +215,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     el.style.fontFamily = 'system-ui, -apple-system, sans-serif';
     el.style.fontSize = '14px';
     el.style.textAlign = 'left';
-    el.style.maxWidth = '240px';
+    el.style.maxWidth = '320px';
     el.style.cursor = 'pointer';
     el.style.border = '2px solid rgba(255,255,255,0.2)';
     el.style.backdropFilter = 'blur(10px)';
     el.style.transition = 'transform 0.2s ease';
 
     el.innerHTML = `
-      <div style="font-weight:700;margin-bottom:8px;font-size:15px;display:flex;align-items:center;gap:6px;">
-        <span>G'day! I'm Rooey</span>
-        <span style="font-size:18px;">🦘</span>
-      </div>
-      <div>
-        <a id="rooey-bubble-link" 
-           href="https://www.engagesydney.com.au/" 
-           target="_blank" 
-           rel="noopener noreferrer" 
-           style="color:#fff;text-decoration:none;font-weight:600;background:rgba(255,255,255,0.15);padding:6px 12px;border-radius:8px;display:inline-block;transition:all 0.2s ease;">
-          Tap to visit our Vision →
-        </a>
+      <div style="font-weight:600;font-size:14px;line-height:1.35;">
+        G'day. I'm Rooey and I'm excited to tell you about Engage. Tap to learn more
       </div>
     `;
 
