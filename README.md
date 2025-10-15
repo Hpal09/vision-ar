@@ -8,11 +8,10 @@ An interactive Augmented Reality (AR) experience built with MindAR and Three.js 
 
 - **Interactive AR Experience**: Point your camera at a Dubai postcard to activate the AR experience
 - **3D Models**: Features the iconic Burj Khalifa building with smooth rotation animations
-- **Animated Characters**: 
-  - Human character walking back and forth
-  - Horse character walking in circles around the building
-  - Griffin flying around the building
-- **Interactive Labels**: Tap on labels to visit related websites
+- **Animated Characters**:
+  - **Rooey**: sequential loop — Hop with Arms Raised → Wave One Hand → Stand and Chat
+  - **Griffin**: flies in a circle with subtle flapping/tilt
+- **Rooey Speech Bubble**: Tap to open `engagesydney.com.au` in a new tab
 - **Responsive Design**: Optimized for mobile devices and various screen sizes
 - **Modern UI**: Clean scanning interface with smooth animations
 
@@ -39,8 +38,8 @@ Visit the live demo: [Vision byDisrupt AR Demo](https://hpal09.github.io/vision-
 1. **Open the Demo**: Navigate to the live demo URL on your mobile device
 2. **Grant Permissions**: Allow camera access when prompted
 3. **Point Camera**: Point your camera at a Dubai postcard image
-4. **Interact**: Tap on labels to visit websites or explore the 3D scene
-5. **Enjoy**: Watch the animated characters and rotating Burj Khalifa model
+4. **Interact**: Tap Rooey’s speech bubble to visit our Vision site, or explore the 3D scene
+5. **Enjoy**: Watch Rooey’s looping animations, the flying griffin, and the rotating Burj Khalifa
 
 ## 🏗️ Project Structure
 
@@ -98,9 +97,9 @@ vision-ar/
 3. Ensure your target image has good contrast and unique features
 
 ### Modifying Animations
-- Character animations are controlled in the animation loop
-- Building rotation speed can be adjusted in `burjModel.userData.animation.rotationSpeed`
-- Walking/flying speeds can be modified in the respective animation data objects
+- Rooey’s sequence plays via an internal loop (hop → wave → stand). You can change clip names or order in `app.js`.
+- Building rotation speed can be adjusted in `app.js` (Burj update in the render loop)
+- Griffin’s path radius/speed/height wobble are configurable in `loadAnimatedGriffin()`
 
 ## 🤝 Contributing
 
