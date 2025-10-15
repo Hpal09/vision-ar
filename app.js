@@ -313,8 +313,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                   pick([/stand/i, /chat/i, /talk/i])
                 ].filter(Boolean);
 
-                // Ensure a clean slate: stop and reset all actions before starting sequence
-                try { Object.values(anims).forEach(a=>{ try{ a.stop(); a.reset(); }catch(_){} }); } catch(_){ }
+                // Start each loop clean to avoid leftover blended states causing skips
+                try {
+                  Object.values(anims).forEach(a=>{ try{ a.stop(); a.reset(); a.enabled = true; }catch(_){} });
+                } catch(_){}
+
+                let previousAction = null;
 
                 const playOnce = (name)=> new Promise(resolve=>{
                   try {
@@ -324,16 +328,29 @@ document.addEventListener("DOMContentLoaded", async () => {
                     act.setLoop(THREE.LoopOnce, 0);
                     act.clampWhenFinished = true;
                     act.enabled = true;
-                    act.play();
+                    // Crossfade from previous to this to avoid T-pose snapping
+                    try {
+                      if (previousAction && previousAction !== act) {
+                        // ensure target is playing before crossfade for stability
+                        act.fadeIn && act.fadeIn(0.12);
+                        previousAction.crossFadeTo(act, 0.25, false);
+                        act.play();
+                      } else {
+                        // first action in the loop
+                        act.fadeIn && act.fadeIn(0.12);
+                        act.play();
+                      }
+                    } catch(_){ act.play(); }
                     const onFinished = (e)=>{
                       try {
                         if (!e || e.action !== act) return; // ignore other actions finishing
                         mixer.removeEventListener('finished', onFinished);
                       } catch(_){}
-                      try { act.stop(); } catch(_){}
+                      // Keep final pose (clamped) as the starting point for next crossfade
+                      previousAction = act;
                       resolve();
                     };
-                    try { mixer.addEventListener('finished', onFinished); } catch(e) { try{ act.stop(); }catch(_){ } resolve(); }
+                    try { mixer.addEventListener('finished', onFinished); } catch(e) { previousAction = act; resolve(); }
                   } catch(e) { resolve(); }
                 });
 
