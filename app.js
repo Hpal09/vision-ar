@@ -96,16 +96,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         group.userData.modelHeight = heightLocal;
       } catch(e){}
 
-      // Debug/visibility ground marker (small magenta disc) under Rooey
-      try {
-        const marker = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.05, 0.05, 0.005, 24),
-          new THREE.MeshBasicMaterial({ color: 0xff00ff })
-        );
-        marker.position.set(0, 0.0025, 0);
-        marker.name = 'rooeyMarker';
-        group.add(marker);
-      } catch(e){}
+      // (removed) debug ground marker
 
       // Wire animations if present
       if (gltf.animations && gltf.animations.length>0) {
