@@ -10,8 +10,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   let renderer = null, scene = null, camera = null, anchor = null;
   let burjModel = null;
   let griffinGroup = null, falconGroupRef = null;
-  let humanWavingGroup = null;
-  let dancingMonkeyGroup = null;
+  let rooeyGroup = null;
 
   function createInstructionsElement() {
     const el = document.createElement('div');
@@ -56,6 +55,68 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Loaders
   const gltfLoader = new GLTFLoader();
+  const loadRooey = async () => {
+    try {
+      const gltf = await gltfLoader.loadAsync('./assets/targets/Rooey.glb');
+      const rooey = gltf.scene;
+      try { rooey.traverse(n=>{ if(n.isMesh){ n.frustumCulled = false; if (n.material) { n.material.needsUpdate = true; } } }); } catch(e){}
+      // Scale to a conservative target height with clamping, then center/ground
+      try {
+        const bbox0 = new THREE.Box3().setFromObject(rooey);
+        const h0 = bbox0.max.y - bbox0.min.y;
+        let scale = 0.08; // fallback
+        if (isFinite(h0) && h0 > 0.0001) {
+          const targetHeight = 0.12; // ~12cm in AR units
+          scale = targetHeight / h0;
+          scale = Math.max(0.02, Math.min(scale, 0.18));
+        }
+        rooey.scale.setScalar(scale);
+        // recenter and ground
+        const bbox1 = new THREE.Box3().setFromObject(rooey);
+        const center1 = bbox1.getCenter(new THREE.Vector3());
+        rooey.position.sub(center1);
+        const bbox2 = new THREE.Box3().setFromObject(rooey);
+        rooey.position.y -= bbox2.min.y;
+      } catch(e){}
+      upgradeModelMaterials(rooey); applyVisualTweaks('Rooey', rooey);
+
+      const group = new THREE.Group(); group.name = 'rooeyGroup'; group.add(rooey);
+      // Place Rooey on the right side (slightly closer to center)
+      group.position.set(0.35, 0, 0);
+
+      // Create a stable bubble anchor above Rooey's head to avoid per-frame bbox jitter
+      try {
+        const bboxFinal = new THREE.Box3().setFromObject(rooey);
+        const heightLocal = Math.max(0.01, bboxFinal.max.y - bboxFinal.min.y);
+        const bubbleAnchor = new THREE.Object3D();
+        bubbleAnchor.name = 'rooeyBubbleAnchor';
+        bubbleAnchor.position.set(0, heightLocal * 30.5, 0);
+        group.add(bubbleAnchor);
+        group.userData.bubbleAnchor = bubbleAnchor;
+        group.userData.modelHeight = heightLocal;
+      } catch(e){}
+
+      // Debug/visibility ground marker (small magenta disc) under Rooey
+      try {
+        const marker = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.05, 0.05, 0.005, 24),
+          new THREE.MeshBasicMaterial({ color: 0xff00ff })
+        );
+        marker.position.set(0, 0.0025, 0);
+        marker.name = 'rooeyMarker';
+        group.add(marker);
+      } catch(e){}
+
+      // Wire animations if present
+      if (gltf.animations && gltf.animations.length>0) {
+        const mixer = new THREE.AnimationMixer(rooey);
+        const animations = {};
+        gltf.animations.forEach(c=>{ animations[c.name]=mixer.clipAction(c); });
+        group.userData.mixer = mixer; group.userData.animations = animations; rooey.userData.mixer = mixer; rooey.userData.animations = animations;
+      }
+      return group;
+    } catch(e) { console.warn('Rooey load failed', e); return new THREE.Group(); }
+  };
   const loadBurjKhalifaModel = async () => {
     try {
       const gltf = await gltfLoader.loadAsync('./assets/targets/burj_khalifa.glb');
@@ -121,92 +182,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     } catch(e){ console.warn('Griffin load failed', e); return new THREE.Group(); }
   };
 
-  // Loader for waving human (appears right of Burj and waves at camera)
-  const loadHumanWaving = async () => {
-    try {
-      const gltf = await gltfLoader.loadAsync('./assets/targets/human_man_waving.glb');
-      const human = gltf.scene;
-      // Basic scale & center
-      try { const bbox = new THREE.Box3().setFromObject(human); const h = bbox.max.y-bbox.min.y||0.4; const s = 0.4/h; human.scale.set(s,s,s); bbox.setFromObject(human); const bottom=bbox.min.y; human.position.y = -bottom; } catch(e){}
-      upgradeModelMaterials(human); applyVisualTweaks('HumanWave', human);
+  // [removed] loadHumanWaving
 
-      // If the GLB has missing textures, apply Wolf3D-style color fallbacks using exact mesh names
-      try {
-        human.traverse(n=>{
-          if (!n.isMesh || !n.material) return;
-          const name = (n.name || '').toLowerCase();
-          const mats = Array.isArray(n.material) ? n.material : [n.material];
-          mats.forEach(m=>{
-            try {
-              if (m.map) return; // preserve textured materials
-              let colorHex = 0xbfbfbf; // default neutral
-
-              // Wolf3D-specific names from Blender: Wolf3D_Head, Wolf3D_Hair, Wolf3D_Outfit_Top, Wolf3D_Outfit_Bottom, Wolf3D_Outfit_Footwear, Wolf3D_Glasses, Wolf3D_Teeth, EyeLeft, EyeRight
-              if (/wolf3d_head|wolf3d_body|head|face|skin|body/.test(name)) colorHex = 0xd8b6a0; // skin tone
-              else if (/wolf3d_hair|hair/.test(name)) colorHex = 0x2b1f14; // dark hair
-              else if (/wolf3d_outfit_top|outfit_top|wolf3d_outfit_top|top|shirt|torso|chest/.test(name)) colorHex = 0x2b69b3; // blue top
-              else if (/wolf3d_outfit_bottom|outfit_bottom|pants|trouser|leg|lower/.test(name)) colorHex = 0x2f2f2f; // dark bottoms
-              else if (/wolf3d_outfit_footwear|outfit_footwear|shoe|boot|foot/.test(name)) colorHex = 0x111111; // shoes
-              else if (/wolf3d_glasses|glasses/.test(name)) colorHex = 0x333333; // glasses/frame
-              else if (/wolf3d_teeth|tooth|teeth/.test(name)) colorHex = 0xffffff;
-              else if (/eyeleft|eyeright|eye/.test(name)) colorHex = 0x111111;
-
-              if (m.color && colorHex) m.color.setHex(colorHex);
-              m.roughness = (typeof m.roughness !== 'undefined') ? (m.roughness ?? 0.6) : 0.6;
-              m.metalness = (typeof m.metalness !== 'undefined') ? (m.metalness ?? 0) : 0;
-              m.envMapIntensity = m.envMapIntensity ?? 0.8;
-              m.needsUpdate = true;
-            } catch(e){}
-          });
-        });
-      } catch(e) { console.warn('Human material fallback failed', e); }
-
-      const group = new THREE.Group(); group.name = 'humanWavingGroup'; group.add(human);
-      group.position.set(0.6,0,0);
-      // Wire animations if present
-      if (gltf.animations && gltf.animations.length>0) {
-        const mixer = new THREE.AnimationMixer(human);
-        const animations = {};
-        gltf.animations.forEach(c=>{ animations[c.name]=mixer.clipAction(c); });
-        group.userData.mixer = mixer; group.userData.animations = animations; human.userData.mixer = mixer; human.userData.animations = animations;
-        // try to find a wave animation
-        const waveKey = Object.keys(animations).find(k=>/wave|waving|hand_wave|arm_wave/i.test(k)) || Object.keys(animations)[0];
-        if (waveKey && animations[waveKey]) {
-          try { animations[waveKey].setLoop(THREE.LoopRepeat, Infinity); animations[waveKey].play(); group.userData.currentAnimation = waveKey; } catch(e){}
-        }
-      }
-      return group;
-    } catch(e) { console.warn('Human waving load failed', e); return new THREE.Group(); }
-  };
-
-  // Loader for dancing monkey (we'll place it to the left of the Burj and play dance animation)
-  const loadDancingMonkey = async () => {
-    try {
-      const gltf = await gltfLoader.loadAsync('./assets/targets/Dancing_Monkey.glb');
-      const monkey = gltf.scene;
-      // Basic scale & center
-      try { const bbox = new THREE.Box3().setFromObject(monkey); const h = bbox.max.y-bbox.min.y||0.4; const s = 0.4/h; monkey.scale.set(s,s,s); bbox.setFromObject(monkey); const bottom=bbox.min.y; monkey.position.y = -bottom; } catch(e){}
-      upgradeModelMaterials(monkey); applyVisualTweaks('DancingMonkey', monkey);
-
-      const group = new THREE.Group(); group.name = 'dancingMonkeyGroup'; group.add(monkey);
-      group.position.set(-0.6,0,0);
-
-      // Wire animations if present
-      if (gltf.animations && gltf.animations.length>0) {
-        const mixer = new THREE.AnimationMixer(monkey);
-        const animations = {};
-        gltf.animations.forEach(c=>{ animations[c.name]=mixer.clipAction(c); });
-        group.userData.mixer = mixer; group.userData.animations = animations; monkey.userData.mixer = mixer; monkey.userData.animations = animations;
-        // try to find a dance animation
-        const danceKey = Object.keys(animations).find(k=>/dance|dancing|hiphop|ballet|groove/i.test(k)) || Object.keys(animations)[0];
-        if (danceKey && animations[danceKey]) {
-          try { animations[danceKey].setLoop(THREE.LoopRepeat, Infinity); animations[danceKey].play(); group.userData.currentAnimation = danceKey; } catch(e){}
-        }
-      }
-
-      return group;
-    } catch(e) { console.warn('Dancing monkey load failed', e); return new THREE.Group(); }
-  };
+  // [removed] loadDancingMonkey
 
   // Initialize MindAR + Three scene
   try {
@@ -229,33 +207,62 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Create UI
     const instructionsEl = createInstructionsElement();
 
-  // Speech bubble for the human (hidden until human is visible)
-  function createSpeechBubble() {
+  // [removed] human speech bubble
+  function createRooeySpeechBubble() {
     const el = document.createElement('div');
-    el.id = 'speech-bubble';
+    el.id = 'rooey-speech-bubble';
     el.style.position = 'fixed';
     el.style.zIndex = '3000';
     el.style.pointerEvents = 'auto';
-    // translate so left/top are the anchor point (we'll set exact px positions)
     el.style.transform = 'translate(-50%, -100%)';
     el.style.display = 'none';
-    el.style.background = 'rgba(255,255,255,0.96)';
-    el.style.color = '#000';
-    el.style.padding = '10px 12px';
-    el.style.borderRadius = '12px';
-    el.style.boxShadow = '0 6px 18px rgba(0,0,0,0.25)';
-    el.style.fontFamily = 'sans-serif';
-    el.style.fontSize = '13px';
+    el.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+    el.style.color = '#fff';
+    el.style.padding = '14px 16px';
+    el.style.borderRadius = '16px';
+    el.style.boxShadow = '0 8px 24px rgba(102, 126, 234, 0.4), 0 4px 8px rgba(0,0,0,0.15)';
+    el.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+    el.style.fontSize = '14px';
     el.style.textAlign = 'left';
-    el.style.maxWidth = '220px';
+    el.style.maxWidth = '240px';
     el.style.cursor = 'pointer';
-    el.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">Welcome to Dubai.</div><div><a id="speech-bubble-link" href="https://www.visitdubai.com/" target="_blank" rel="noopener noreferrer" style="color:#0066cc;text-decoration:none;font-weight:600;">Tap to find out more</a></div>`;
-    // also open via click on the whole bubble for easier tapping
-    el.addEventListener('click', (e)=>{ try{ window.open('https://www.visitdubai.com/','_blank','noopener'); }catch(err){} });
+    el.style.border = '2px solid rgba(255,255,255,0.2)';
+    el.style.backdropFilter = 'blur(10px)';
+    el.style.transition = 'transform 0.2s ease';
+
+    el.innerHTML = `
+      <div style="font-weight:700;margin-bottom:8px;font-size:15px;display:flex;align-items:center;gap:6px;">
+        <span>G'day! I'm Rooey</span>
+        <span style="font-size:18px;">🦘</span>
+      </div>
+      <div>
+        <a id="rooey-bubble-link" 
+           href="https://www.engagesydney.com.au/" 
+           target="_blank" 
+           rel="noopener noreferrer" 
+           style="color:#fff;text-decoration:none;font-weight:600;background:rgba(255,255,255,0.15);padding:6px 12px;border-radius:8px;display:inline-block;transition:all 0.2s ease;">
+          Tap to visit our Vision →
+        </a>
+      </div>
+    `;
+
+    // Hover effect
+    el.addEventListener('mouseenter', ()=> {
+      el.style.transform = 'translate(-50%, -100%) scale(1.05)';
+    });
+    el.addEventListener('mouseleave', ()=> {
+      el.style.transform = 'translate(-50%, -100%) scale(1)';
+    });
+
+    el.addEventListener('click', (e)=>{ 
+      try{ window.open('https://www.engagesydney.com.au/','_blank','noopener'); }catch(err){} 
+    });
+
     document.body.appendChild(el);
     return el;
   }
-  const speechBubbleEl = createSpeechBubble();
+  const rooeySpeechBubbleEl = createRooeySpeechBubble();
+  let rooeyBubbleScreenPos = { x: null, y: null };
 
   burjModel = await loadBurjKhalifaModel();
   burjModel.position.copy(burjModel.userData?.startPosition||new THREE.Vector3(0,0.02,0));
@@ -267,14 +274,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   griffinGroup.visible = false;
   anchor.group.add(griffinGroup);
   falconGroupRef = griffinGroup;
-  // Load waving human (hidden by default)
-  humanWavingGroup = await loadHumanWaving();
-  humanWavingGroup.visible = false;
-  anchor.group.add(humanWavingGroup);
-  // Load dancing monkey (hidden by default)
-  dancingMonkeyGroup = await loadDancingMonkey();
-  dancingMonkeyGroup.visible = false;
-  anchor.group.add(dancingMonkeyGroup);
+  // [removed] humanWavingGroup
+  // [removed] dancingMonkeyGroup
+  // Load Rooey (hidden by default)
+  rooeyGroup = await loadRooey();
+  rooeyGroup.visible = false;
+  anchor.group.add(rooeyGroup);
  
   // Show demo sequence when target found
   anchor.onTargetFound = () => {
@@ -294,51 +299,75 @@ document.addEventListener("DOMContentLoaded", async () => {
             try { const anims = griffinGroup.userData?.animations || (falconGroupRef && falconGroupRef.userData && falconGroupRef.userData.animations) || {}; Object.values(anims).forEach(a=>{ try{ a.play && a.play(); }catch(e){} }); } catch(e){}
           }
         } catch(e) {}
-        // Reveal waving human, position to the right of Burj and face camera
+        // [removed] human reveal and placement
+        // [removed] dancing monkey reveal
+
+        // Reveal Rooey and sequence animations
         try {
-          if (humanWavingGroup) {
-            humanWavingGroup.visible = true;
-            // compute a safe position to the right of the Burj
-            try {
-              if (burjModel) {
-                const box = new THREE.Box3().setFromObject(burjModel);
-                const size = box.getSize(new THREE.Vector3());
-                const center = box.getCenter(new THREE.Vector3());
-                const pos = center.clone();
-                pos.x += (size.x * 0.6) + 0.12;
-                pos.y = 0;
-                pos.z += (size.z * 0.05);
-                humanWavingGroup.position.copy(pos);
-              } else {
-                humanWavingGroup.position.set(0.6, 0, 0);
-              }
-              // face the camera by adjusting rotation.y of the group
-              try { const camPos = new THREE.Vector3(); camera.getWorldPosition(camPos); const worldPos = humanWavingGroup.getWorldPosition(new THREE.Vector3()); const lookDir = camPos.clone().sub(worldPos).normalize(); const targetY = Math.atan2(lookDir.x, lookDir.z); humanWavingGroup.rotation.y = targetY; } catch(e){}
-            } catch(e){}
-            // start wave animation if present
-            try { Object.values(humanWavingGroup.userData?.animations || {}).forEach(a=>{ try{ a.play && a.play(); }catch(e){} }); } catch(e){}
-          }
-        } catch(e) {}
-        // Reveal dancing monkey, position to the left of Burj and play dance
-        try {
-          if (dancingMonkeyGroup) {
-            dancingMonkeyGroup.visible = true;
-            try {
-              if (burjModel) {
-                const box = new THREE.Box3().setFromObject(burjModel);
-                const size = box.getSize(new THREE.Vector3());
-                const center = box.getCenter(new THREE.Vector3());
-                const pos = center.clone();
-                pos.x -= (size.x * 0.6) + 0.12; // place on the other side from human
-                pos.y = 0;
-                pos.z += (size.z * 0.05);
-                dancingMonkeyGroup.position.copy(pos);
-              } else {
-                dancingMonkeyGroup.position.set(-0.6, 0, 0);
-              }
-              // try play animations
-              try { Object.values(dancingMonkeyGroup.userData?.animations || {}).forEach(a=>{ try{ a.play && a.play(); }catch(e){} }); } catch(e){}
-            } catch(e){}
+          if (rooeyGroup) {
+            rooeyGroup.visible = true;
+            // Face camera only (no dynamic reposition)
+            try { const camPos = new THREE.Vector3(); camera.getWorldPosition(camPos); const worldPos = rooeyGroup.getWorldPosition(new THREE.Vector3()); const lookDir = camPos.clone().sub(worldPos).normalize(); const targetY = Math.atan2(lookDir.x, lookDir.z); rooeyGroup.rotation.y = targetY; } catch(e){}
+
+            // sequential animation playback by name (case-insensitive contains)
+            const runSequence = async () => {
+              try {
+                const mixer = rooeyGroup.userData?.mixer;
+                const anims = rooeyGroup.userData?.animations || {};
+                const names = Object.keys(anims);
+                const pick = (regexArr)=> names.find(n=> regexArr.some(r=> r.test(n)));
+                const seq = [
+                  pick([/hop/i, /arms\s*raised/i, /hop.*arm/i]),
+                  pick([/wave/i, /one\s*hand/i, /wave.*hand/i]),
+                  pick([/stand/i, /chat/i, /talk/i])
+                ].filter(Boolean);
+
+                // Ensure a clean slate: stop and reset all actions before starting sequence
+                try { Object.values(anims).forEach(a=>{ try{ a.stop(); a.reset(); }catch(_){} }); } catch(_){ }
+
+                const playOnce = (name)=> new Promise(resolve=>{
+                  try {
+                    const act = anims[name];
+                    if (!act) return resolve();
+                    act.reset();
+                    act.setLoop(THREE.LoopOnce, 0);
+                    act.clampWhenFinished = true;
+                    act.enabled = true;
+                    act.play();
+                    const onFinished = (e)=>{
+                      try {
+                        if (!e || e.action !== act) return; // ignore other actions finishing
+                        mixer.removeEventListener('finished', onFinished);
+                      } catch(_){}
+                      try { act.stop(); } catch(_){}
+                      resolve();
+                    };
+                    try { mixer.addEventListener('finished', onFinished); } catch(e) { try{ act.stop(); }catch(_){ } resolve(); }
+                  } catch(e) { resolve(); }
+                });
+
+                // If no mixer or no seq, try to play first available animation
+                if (!mixer || seq.length===0) {
+                  const first = names[0];
+                  if (first && anims[first]) {
+                    try { anims[first].setLoop(THREE.LoopRepeat, Infinity); anims[first].play(); } catch(e){}
+                  }
+                  return;
+                }
+
+                // run through sequence
+                mixer.timeScale = 1;
+                for (const key of seq) {
+                  await playOnce(key);
+                }
+                // After sequence completes, wait 1 second then repeat
+                setTimeout(() => {
+                  runSequence(); // Repeat the entire sequence
+                }, 1000);
+              } catch(e){}
+            };
+
+            runSequence();
           }
         } catch(e) {}
       }
@@ -361,16 +390,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         griffinGroup.visible = false;
       }
     } catch(e){}
+    // [removed] dancing monkey lost handling
+    // [removed] human lost handling
     try {
-      if (dancingMonkeyGroup) {
-        try { Object.values(dancingMonkeyGroup.userData?.animations || {}).forEach(a=>{ try{ a.stop && a.stop(); }catch(e){} }); } catch(e){}
-        dancingMonkeyGroup.visible = false;
-      }
-    } catch(e){}
-    try {
-      if (humanWavingGroup) {
-        try { Object.values(humanWavingGroup.userData?.animations || {}).forEach(a=>{ try{ a.stop && a.stop(); }catch(e){} }); } catch(e){}
-        humanWavingGroup.visible = false;
+      if (rooeyGroup) {
+        try { Object.values(rooeyGroup.userData?.animations || {}).forEach(a=>{ try{ a.stop && a.stop(); }catch(e){} }); } catch(e){}
+        rooeyGroup.visible = false;
       }
     } catch(e){}
   };
@@ -405,12 +430,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         child.position.x = d.centerOffset.x + x;
         child.position.y = d.centerOffset.y + h;
         child.position.z = d.centerOffset.z + z;
-        child.rotation.y = (angle+Math.PI)*0.6;
-        child.rotation.z = Math.sin(d.time*d.speed*2)*0.1;
+        child.rotation.y = angle - Math.PI/2;
+        //child.rotation.z = Math.sin(d.time*d.speed*2)*0.1;
 
         // Procedural flap fallback
         if (d.flapFallback) {
-          const flapAngle = Math.sin(d.time * d.speed * 10) * 1.0; // stronger flap
+          const flapAngle = Math.sin(d.time * d.speed * 6) * 0.7; // smoother, gentler flap
           child.traverse(n=>{
             if ((n.isMesh || n.isBone) && /wing|wing_l|left_wing|right_wing|feather|primary|secondary|flap/i.test(n.name)) {
               if (/left|_l|\.l$/i.test(n.name)) n.rotation.z = flapAngle * 1.0;
@@ -430,29 +455,55 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     renderer.render(scene, camera);
     // Update speech bubble position and visibility after render calculations
+    // [removed] human speech bubble update
+
+    // Update Rooey speech bubble position (use a fixed bubble anchor for stability)
     try {
-      if (speechBubbleEl) {
-        if (humanWavingGroup && humanWavingGroup.visible) {
-          // compute a world position slightly above and to the right of the human
-          const targetWorld = humanWavingGroup.getWorldPosition(new THREE.Vector3());
+      if (rooeySpeechBubbleEl) {
+        if (rooeyGroup && rooeyGroup.visible) {
+          let targetWorld;
           try {
-            const bbox = new THREE.Box3().setFromObject(humanWavingGroup);
-            const size = bbox.getSize(new THREE.Vector3());
-            targetWorld.y += size.y * 0.9;
-            targetWorld.x += size.x * 0.45;
-            targetWorld.z += size.z * 0.05;
-          } catch(e) {
-            targetWorld.y += 0.15; targetWorld.x += 0.1;
-          }
-          // project to NDC space
+            const anchorObj = rooeyGroup.userData && rooeyGroup.userData.bubbleAnchor;
+            if (anchorObj) {
+              targetWorld = anchorObj.getWorldPosition(new THREE.Vector3());
+              // small right offset in object space: project a point to the right
+              try {
+                const rightOffset = new THREE.Vector3(rooeyGroup.userData.modelHeight * 0.35, 0, 0);
+                anchorObj.localToWorld(rightOffset);
+                // replace only x to shift right slightly in screen space
+                targetWorld.x = rightOffset.x;
+              } catch(e){}
+            } else {
+              targetWorld = rooeyGroup.getWorldPosition(new THREE.Vector3());
+              targetWorld.y += 0.5;
+              targetWorld.x += 0.14;
+            }
+          } catch(e) { targetWorld = rooeyGroup.getWorldPosition(new THREE.Vector3()); }
           const proj = targetWorld.project(camera);
-          const x = (proj.x * 0.5 + 0.5) * renderer.domElement.clientWidth;
-          const y = (-proj.y * 0.5 + 0.5) * renderer.domElement.clientHeight;
-          speechBubbleEl.style.left = `${x}px`;
-          speechBubbleEl.style.top = `${y}px`;
-          speechBubbleEl.style.display = 'block';
+          // Convert to screen coordinates
+          let x = (proj.x * 0.5 + 0.5) * renderer.domElement.clientWidth;
+          let y = (-proj.y * 0.5 + 0.5) * renderer.domElement.clientHeight;
+          // Clamp inside viewport with padding
+          const pad = 8;
+          x = Math.max(pad, Math.min(x, renderer.domElement.clientWidth - pad));
+          y = Math.max(pad, Math.min(y, renderer.domElement.clientHeight - pad));
+          // Smooth to reduce jitter
+          const alpha = 0.12;
+          if (rooeyBubbleScreenPos.x === null) {
+            rooeyBubbleScreenPos.x = x;
+            rooeyBubbleScreenPos.y = y;
+          } else {
+            rooeyBubbleScreenPos.x += (x - rooeyBubbleScreenPos.x) * alpha;
+            rooeyBubbleScreenPos.y += (y - rooeyBubbleScreenPos.y) * alpha;
+          }
+          // Snap to integer pixels to avoid subpixel shimmering
+          rooeySpeechBubbleEl.style.left = `${Math.round(rooeyBubbleScreenPos.x)}px`;
+          rooeySpeechBubbleEl.style.top = `${Math.round(rooeyBubbleScreenPos.y)}px`;
+          rooeySpeechBubbleEl.style.display = 'block';
         } else {
-          speechBubbleEl.style.display = 'none';
+          rooeySpeechBubbleEl.style.display = 'none';
+          // Reset smoothing when hidden
+          rooeyBubbleScreenPos.x = null; rooeyBubbleScreenPos.y = null;
         }
       }
     } catch(e){}
